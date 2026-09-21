@@ -85,6 +85,7 @@ input[type=number]{text-align:center;font-variant-numeric:tabular-nums}
 .sets input.done{border-color:var(--good);background:var(--good-soft)}
 .ex .tools{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
 .hint{font-size:13px;color:var(--ink-2);margin-top:6px}
+.bar{font-size:13px;color:var(--amber-ink);margin-top:6px;font-weight:500}
 .timer{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:.02em;min-width:74px;text-align:center}
 .timer.done{color:var(--good)}
 /* history + charts */
@@ -148,7 +149,11 @@ const GUIDES = [{"id": "squat", "title": "Barbell Back Squat", "rx": "3×8–10 
 <script>
 /* ---------- state ---------- */
 const KEY='gymlog2026.v1';
-const blank=()=>({startDate:null, climbDates:[], flareDates:[], sessions:[], pullupTests:[], tab:'today', dayOverride:null});
+const blank=()=>({startDate:null, climbDates:[], flareDates:[], sessions:[], pullupTests:[], tab:'today', dayOverride:null, barMode:'total'});
+const BAR=20;
+const isBarbell=n=>/barbell/i.test(n) && !/skull/i.test(n);
+const isEZ=n=>/skull/i.test(n);
+function barText(v){ const w=parseFloat(v); if(isNaN(w)) return ''; if(S.barMode==='plates'){ return `${w} kg of plates · ${(w/2)} kg a side · ${w+BAR} kg total with the ${BAR} kg bar`; } const per=(w-BAR)/2; return per<0?`${w} kg is under the ${BAR} kg bar`:`${w} kg total incl. ${BAR} kg bar · ${per} kg a side`; }
 let S=blank();
 function load(){ try{ const r=localStorage.getItem(KEY); if(r) S=Object.assign(blank(),JSON.parse(r)); }catch(e){} }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
@@ -256,6 +261,8 @@ function renderToday(m){
       grid.append(el('div',{class:'n'},i+1),wi,ri,cp);
     });
     box.append(grid);
+    if(isBarbell(ex.name)){ const bl=el('div',{class:'bar num',id:'bar-'+key},barText((s.sets[key].map(x=>x.w).filter(x=>x!=='').slice(-1)[0])||sug.v)); box.append(bl); grid.addEventListener('input',e=>{ if(e.target.matches('input') && e.target.getAttribute('aria-label').endsWith('weight')) bl.textContent=barText(e.target.value); }); }
+    if(isEZ(ex.name)) box.append(el('div',{class:'bar'},'EZ-bar — logged as a total (bar plus plates), as in your last block; the 20 kg bar maths does not apply.'));
     const tools=el('div',{class:'tools'}, el('button',{class:'btn small ghost',onclick:()=>{s.sets[key].push({w:'',r:''});touch(date);render();}},'+ set'));
     if(g) tools.append(el('button',{class:'btn small ghost',onclick:()=>{S.tab='guides';S.openGuide=g.id;save();render();}},'Guide'));
     if(g) tools.append(el('a',{class:'btn small ghost',href:g.video,target:'_blank',rel:'noopener'},'▶ Video'));
@@ -359,6 +366,9 @@ function renderMore(m){
     el('div',{class:'row'}, el('label',{class:'f'},'Week 1 started', el('input',{type:'date',value:S.startDate||'',onchange:e=>{S.startDate=e.target.value||null;save();render();}})), el('label',{class:'f'},'Climb dates', el('input',{type:'date',onchange:e=>{ if(e.target.value){toggleIn(S.climbDates,e.target.value);save();render();toast('Climb logged');} }}))),
     el('div',{class:'small muted'}, S.climbDates.length?'Climbs: '+S.climbDates.slice(-8).map(fmt).join(', '):'No climbs logged. Tap "Climbed today" on the Today tab, or add a date here.'));
   m.append(st);
+  m.append(el('div',{class:'panel stack'}, el('h2',{},'Barbell weights'), el('p',{class:'small muted'},`How a barbell load is written in this app and in the export. The programme's loads are totals including the ${BAR} kg bar (its close-grip bench resumes at 20 kg — an empty bar). Your older sheets sometimes wrote plates only ("30+bar"). Pick one and every barbell exercise shows the plate maths for it.`),
+    el('div',{class:'seg',role:'group','aria-label':'Barbell weight convention'}, el('button',{'aria-pressed':String(S.barMode!=='plates'),onclick:()=>{S.barMode='total';save();render();}},`Total incl. ${BAR} kg bar`), el('button',{'aria-pressed':String(S.barMode==='plates'),onclick:()=>{S.barMode='plates';save();render();}},'Plates only')),
+    el('div',{class:'small muted'}, S.barMode==='plates'?`Suggested loads still come from the programme's totals, so read them as totals and subtract the bar — or switch back.`:`Example: 30 kg = ${BAR} kg bar + 5 kg a side.`)));
   const ex=el('div',{class:'panel stack'}, el('h2',{},'Export to the workbook'), el('p',{class:'small muted'},'Sheet5 layout: one row per exercise, one column pair per session (weight | reps; assistance | reps for pull-ups), bodyweight in its own row. Copy it and paste into a spreadsheet.'),
     el('div',{class:'row'}, el('button',{class:'btn primary',onclick:async()=>{ const t=exportSheet5(); try{ await navigator.clipboard.writeText(t); toast('Copied'); }catch(e){ $('#exportBox').hidden=false; $('#exportBox').value=t; toast('Select and copy below'); } }},'Copy Sheet5 export'), el('button',{class:'btn',onclick:()=>{ $('#exportBox').hidden=!$('#exportBox').hidden; $('#exportBox').value=exportSheet5(); }},'Show')),
     el('textarea',{class:'mono',id:'exportBox',hidden:''}));
@@ -372,7 +382,7 @@ function renderMore(m){
 }
 function exportSheet5(){
   const keys=allExerciseKeys(); const ses=[...S.sessions].sort((a,b)=>a.date<b.date?-1:1);
-  const hdr=['Exercise', ...ses.flatMap(s=>[s.date+' D'+s.day,''])];
+  const hdr=['Exercise ('+(S.barMode==='plates'?'barbell loads: plates only':'barbell loads: total incl. '+BAR+' kg bar')+')', ...ses.flatMap(s=>[s.date+' D'+s.day,''])];
   const lines=[hdr.join('\t'), ['Bodyweight (kg)',...ses.flatMap(s=>[s.bodyweight||'',''])].join('\t')];
   PROGRAMME.days.forEach(d=>{ lines.push(d.title.toUpperCase()); d.exercises.forEach(e=>{ const k=exKey(e.name); const maxSets=Math.max(1,...ses.map(s=>(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='').length));
     for(let i=0;i<maxSets;i++){ lines.push([i===0?`${e.name} ${e.sets}x${e.reps}`:'', ...ses.flatMap(s=>{ const st=(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='')[i]; return st?[st.w,st.r]:['','']; })].join('\t')); } }); });
