@@ -234,6 +234,7 @@ const entriesOn=(date,type)=>S.entries.filter(e=>e.date===date&&(!type||e.type==
 function entry(date,type){ return S.entries.find(e=>e.date===date&&e.type===type)||null; }
 function addEntry(date,type,fields){ const e=Object.assign({id:uid(),date,type,note:''},fields); S.entries.push(e); S.entries.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0); save(); return e; }
 function removeEntry(e){ S.entries=S.entries.filter(x=>x!==e); save(); }
+function clearDay(date){ S.entries=S.entries.filter(e=>e.date!==date); S.sessions=S.sessions.filter(s=>s.date!==date); save(); }
 function gymOn(date){ return S.sessions.filter(s=>s.date===date && sessionHasData(s)); }
 const sessionHasData=s=> s.bodyweight!=='' || (s.comment&&s.comment.trim()!=='') || Object.values(s.sets).some(a=>a.some(x=>x.w!==''||x.r!==''));
 function familiesOn(date){ const f=new Set(); if(gymOn(date).length) f.add('gym'); entriesOn(date).forEach(e=>f.add(FAMILY(e.type))); return ACTS.filter(a=>f.has(a)); }
@@ -280,7 +281,7 @@ const guideFor=ex=>GUIDES.find(g=>g.id===GUIDEMAP[exKey(ex.name)]);
 const $=s=>document.querySelector(s);
 const el=(t,a={},...c)=>{ const e=document.createElement(t); for(const k in a){ if(a[k]==null) continue; if(k==='class')e.className=a[k]; else if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]); else if(k==='html')e.innerHTML=a[k]; else e.setAttribute(k,a[k]); } c.flat().forEach(x=>{ if(x==null) return; e.append(x.nodeType?x:document.createTextNode(String(x))); }); return e; };
 let TIMER={left:0,total:0,h:null};
-function go(view,patch={}){ Object.assign(S,patch); S.view=view; save(); render(); $('#main').scrollTop=0; }
+function go(view,patch={}){ Object.assign(S,patch); S.view=view; S.clearArm=null; save(); render(); $('#main').scrollTop=0; }
 function render(){
   const m=$('#main'); m.replaceChildren(); const h=$('#hdr'); h.replaceChildren();
   const w=weekNo(today()); const ph=phaseOf(w); const phaseText= ph? `Phase ${ph} · Week ${w}` : (today()<S.settings.programmeStart?'Starts '+fmt(S.settings.programmeStart):'—');
@@ -299,15 +300,16 @@ function renderHome(m){
   const d=S.date; const dt=parse(d);
   const bar=el('div',{class:'panel'},
     el('div',{class:'datebar'},
-      el('button',{class:'arrow','aria-label':'Previous day',onclick:()=>{S.date=addDays(S.date,-1);S.calMonth=null;save();render();}},'‹'),
+      el('button',{class:'arrow','aria-label':'Previous day',onclick:()=>{S.date=addDays(S.date,-1);S.calMonth=null;S.clearArm=null;save();render();}},'‹'),
       el('button',{class:'d','aria-label':'Toggle calendar',onclick:()=>{S.calOpen=!S.calOpen;S.calMonth=null;save();render();}},
         el('div',{class:'wd'},dt.toLocaleDateString('en-AU',{weekday:'long'})),
         el('div',{class:'dm'},dt.toLocaleDateString('en-AU',{day:'numeric',month:'long'})),
         el('div',{class:'yr'},String(dt.getFullYear())+(d===today()?' · today':d<today()?' · '+daysBetween(d,today())+' day'+(daysBetween(d,today())===1?'':'s')+' ago':' · in '+daysBetween(today(),d)+' day'+(daysBetween(today(),d)===1?'':'s')))),
-      el('button',{class:'arrow','aria-label':'Next day',onclick:()=>{S.date=addDays(S.date,1);S.calMonth=null;save();render();}},'›')));
+      el('button',{class:'arrow','aria-label':'Next day',onclick:()=>{S.date=addDays(S.date,1);S.calMonth=null;S.clearArm=null;save();render();}},'›')));
   if(S.calOpen) bar.append(el('div',{style:'margin-top:10px'},calendar()));
   const kinds=kindsOn(d);
   bar.append(el('div',{class:'row',style:'margin-top:10px;justify-content:center'}, kinds.length? kinds.map(k=>el('span',{class:'chip',style:'--c:'+COLOR[FAMILY(k)]},LABEL[k])) : el('span',{class:'small muted'},'Nothing logged for this day')));
+  if(kinds.length){ const armed=S.clearArm===d; bar.append(el('div',{class:'row',style:'margin-top:8px;justify-content:center'}, el('button',{class:'btn small'+(armed?' primary':' ghost'),onclick:()=>{ if(!armed){ S.clearArm=d; render(); return; } clearDay(d); S.clearArm=null; save(); render(); toast('Day cleared'); }}, armed?'Tap again to clear '+fmt(d):'Clear this day'))); }
   m.append(bar);
   m.append(el('button',{class:'btn primary big',onclick:()=>{ if(!familiesOn(d).includes(S.act) && familiesOn(d).length) S.act=familiesOn(d)[0]; go('day'); }}, d===today()?'Log today':'Log this day'));
   if(d!==today()) m.append(el('button',{class:'btn ghost',onclick:()=>{S.date=today();S.calMonth=null;save();render();}},'Back to today'));
@@ -324,7 +326,7 @@ function calendar(){
   const g=el('div',{class:'cal'}); ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(h=>g.append(el('div',{class:'h'},h)));
   for(let i=0;i<start;i++) g.append(el('div'));
   for(let d=1;d<=dim;d++){ const ds=`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`; const fams=familiesOn(ds);
-    g.append(el('button',{class:(ds===today()?'today ':'')+(ds>today()?'future':''),'aria-pressed':String(ds===S.date),'aria-label':fmtLong(ds),onclick:()=>{S.date=ds;save();render();}}, String(d), el('span',{class:'dots'},...fams.map(f=>el('i',{style:'--c:'+COLOR[f]}))))); }
+    g.append(el('button',{class:(ds===today()?'today ':'')+(ds>today()?'future':''),'aria-pressed':String(ds===S.date),'aria-label':fmtLong(ds),onclick:()=>{S.date=ds;S.clearArm=null;save();render();}}, String(d), el('span',{class:'dots'},...fams.map(f=>el('i',{style:'--c:'+COLOR[f]}))))); }
   wrap.append(g);
   wrap.append(el('div',{class:'legend',style:'margin-top:8px'},...ACTS.map(a=>el('span',{style:'--c:'+COLOR[a]},LABEL[a]))));
   return wrap;
@@ -669,7 +671,7 @@ function exportActivities(){
 
 /* ---------- boot ---------- */
 load();
-S.date=today(); S.view='home'; S.calMonth=null; S.calOpen=false; // start-up always opens Home, at today
+S.date=today(); S.view='home'; S.calMonth=null; S.calOpen=false; S.clearArm=null; // start-up always opens Home, at today
 function start(hot){ if(hot&&hot.S) S=Object.assign(blank(),hot.S); render(); }
 try{ window.claude?.hot?.snapshot?.(()=>({S})); }catch(e){}
 (window.claude?.hot?.ready) ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
