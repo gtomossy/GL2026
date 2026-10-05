@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}</style>
 <title>GT Fit</title>
+<meta name="gtfit-version" content="2.2">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2430">
 <meta name="mobile-web-app-capable" content="yes">
@@ -191,7 +192,7 @@ const GUIDES = [{"id": "squat", "title": "Barbell Back Squat", "rx": "3×8–10 
 </script>
 <script>
 /* ---------- constants ---------- */
-const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
+const APP_VERSION='2.2'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
 const ACTS=['walk','stretch','gym','climb','other'];
 const OTHERS=['cycle','hike','swim','custom'];
 const FAMILY=k=>OTHERS.includes(k)?'other':k;               // colour family of a kind
@@ -204,11 +205,11 @@ const CLIMB_LOCS=['Castle Hill','St Peters','St Leonards','Macquarie Park'];
 const today=()=>{ const d=new Date(); return iso(d); };
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const blank=()=>({v:2, view:'home', date:today(), act:'gym', otherKind:'cycle', dayOverride:null, histKey:null, trendTab:'all', calOpen:false, calMonth:null,
-  settings:{programmeStart:DEFAULT_START, barMode:'total', targets:{gym:2,climb:1,walk:7,stretch:7,other:1}, climbLocations:CLIMB_LOCS.slice()},
+  settings:{programmeStart:null, programmeStarted:false, barMode:'total', targets:{gym:2,climb:1,walk:7,stretch:7,other:1}, climbLocations:CLIMB_LOCS.slice()},
   sessions:[], pullupTests:[], entries:[], migrated:null});
 let S=blank();
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-function load(){ try{ const r=localStorage.getItem(KEY); if(r){ const o=JSON.parse(r); S=Object.assign(blank(),o); S.settings=Object.assign(blank().settings,o.settings||{}); S.settings.targets=Object.assign(blank().settings.targets,(o.settings||{}).targets||{}); return; } migrate(); }catch(e){} }
+function load(){ try{ const r=localStorage.getItem(KEY); if(r){ const o=JSON.parse(r); S=Object.assign(blank(),o); S.settings=Object.assign(blank().settings,o.settings||{}); S.settings.targets=Object.assign(blank().settings.targets,(o.settings||{}).targets||{}); if((o.settings||{}).programmeStarted===undefined){ const prog=S.sessions.some(s=>s.day!=='pre'&&Object.values(s.sets||{}).some(a=>a.some(x=>x.w!==''||x.r!==''))); S.settings.programmeStarted=prog; if(!prog) S.settings.programmeStart=null; S.upgraded='2.2'; save(); } return; } migrate(); }catch(e){} }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 function migrate(){ // v1 store → v2; the v1 record is left in place under its own key
   const r=localStorage.getItem(OLDKEY); if(!r) return; let o; try{ o=JSON.parse(r); }catch(e){ return; }
@@ -218,7 +219,7 @@ function migrate(){ // v1 store → v2; the v1 record is left in place under its
   if(o.barMode) S.settings.barMode=o.barMode;
   (o.climbDates||[]).forEach(d=>{ S.entries.push({id:uid(),date:d,type:'climb',boulder:false,toprope:false,location:'',note:''}); n.climbs++; });
   (o.flareDates||[]).forEach(d=>{ const s=S.sessions.find(x=>x.date===d); const t='Elbow/forearm flare logged (carried from v1).'; if(s) s.comment=(s.comment?s.comment+' ':'')+t; else S.entries.push({id:uid(),date:d,type:'custom',name:'Elbow flare',note:t}); n.flares++; });
-  S.migrated={on:today(),from:'v1',counts:n}; save();
+  S.settings.programmeStarted=S.sessions.length>0; S.settings.programmeStart=S.settings.programmeStarted?DEFAULT_START:null; S.migrated={on:today(),from:'v1',counts:n}; save();
 }
 const parse=s=>{ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
 const addDays=(s,n)=>{ const d=parse(s); d.setDate(d.getDate()+n); return iso(d); };
@@ -236,7 +237,7 @@ function addEntry(date,type,fields){ const e=Object.assign({id:uid(),date,type,n
 function removeEntry(e){ S.entries=S.entries.filter(x=>x!==e); save(); }
 function clearDay(date){ S.entries=S.entries.filter(e=>e.date!==date); S.sessions=S.sessions.filter(s=>s.date!==date); save(); }
 function gymOn(date){ return S.sessions.filter(s=>s.date===date && sessionHasData(s)); }
-const sessionHasData=s=> s.bodyweight!=='' || (s.comment&&s.comment.trim()!=='') || Object.values(s.sets).some(a=>a.some(x=>x.w!==''||x.r!==''));
+const sessionHasData=s=> s.day==='pre' || s.bodyweight!=='' || (s.comment&&s.comment.trim()!=='') || Object.values(s.sets).some(a=>a.some(x=>x.w!==''||x.r!==''));
 function familiesOn(date){ const f=new Set(); if(gymOn(date).length) f.add('gym'); entriesOn(date).forEach(e=>f.add(FAMILY(e.type))); return ACTS.filter(a=>f.has(a)); }
 function kindsOn(date){ const k=[]; if(gymOn(date).length) k.push('gym'); entriesOn(date).forEach(e=>{ if(!k.includes(e.type)) k.push(e.type); }); return k; }
 function occurrences(kind){ // one per date
@@ -252,7 +253,7 @@ const isLower=n=>LOWER.test(n);
 const isBarbell=n=>/barbell/i.test(n) && !/skull/i.test(n);
 const isEZ=n=>/skull/i.test(n);
 function barText(v){ const w=parseFloat(v); if(isNaN(w)) return ''; if(S.settings.barMode==='plates'){ return `${w} kg of plates · ${(w/2)} kg a side · ${w+BAR} kg total with the ${BAR} kg bar`; } const per=(w-BAR)/2; return per<0?`${w} kg is under the ${BAR} kg bar`:`${w} kg total incl. ${BAR} kg bar · ${per} kg a side`; }
-function weekNo(date){ const st=S.settings.programmeStart; if(!st||date<st) return 0; return Math.floor(daysBetween(st,date)/7)+1; }
+function weekNo(date){ const st=S.settings.programmeStart; if(!S.settings.programmeStarted||!st||date<st) return 0; return Math.floor(daysBetween(st,date)/7)+1; }
 function phaseOf(w){ return w<=0?0 : w<=3?1 : w<=8?2 : 3; }
 function dayIds(ph){ return ph===3?['1','2','3']:['A','B']; }
 function dayById(id){ return PROGRAMME.days.find(d=>d.id===id); }
@@ -281,10 +282,10 @@ const guideFor=ex=>GUIDES.find(g=>g.id===GUIDEMAP[exKey(ex.name)]);
 const $=s=>document.querySelector(s);
 const el=(t,a={},...c)=>{ const e=document.createElement(t); for(const k in a){ if(a[k]==null) continue; if(k==='class')e.className=a[k]; else if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]); else if(k==='html')e.innerHTML=a[k]; else e.setAttribute(k,a[k]); } c.flat().forEach(x=>{ if(x==null) return; e.append(x.nodeType?x:document.createTextNode(String(x))); }); return e; };
 let TIMER={left:0,total:0,h:null};
-function go(view,patch={}){ Object.assign(S,patch); S.view=view; S.clearArm=null; save(); render(); $('#main').scrollTop=0; }
+function go(view,patch={}){ Object.assign(S,patch); S.view=view; S.clearArm=null; S.startArm=null; S.unstartArm=null; save(); render(); $('#main').scrollTop=0; }
 function render(){
   const m=$('#main'); m.replaceChildren(); const h=$('#hdr'); h.replaceChildren();
-  const w=weekNo(today()); const ph=phaseOf(w); const phaseText= ph? `Phase ${ph} · Week ${w}` : (today()<S.settings.programmeStart?'Starts '+fmt(S.settings.programmeStart):'—');
+  const w=weekNo(today()); const ph=phaseOf(w); const phaseText= ph? `Phase ${ph} · Week ${w}` : (S.settings.programmeStarted&&S.settings.programmeStart&&today()<S.settings.programmeStart?'Starts '+fmt(S.settings.programmeStart):'Pre-programme');
   const rib=$('#ribbon'); rib.hidden = S.view!=='day';
   if(S.view==='home'){ h.append(el('h1',{},'GT Fit'), el('div',{class:'phase'},phaseText)); renderHome(m); }
   else if(S.view==='day'){ h.append(el('button',{class:'hb','aria-label':'Home',onclick:()=>go('home')},'‹ Home'), el('h1',{style:'font-size:19px;text-align:center'},fmtLong(S.date)), el('div',{class:'phase'},S.date===today()?'Today':'')); renderDay(m); }
@@ -293,11 +294,12 @@ function render(){
   else if(S.view==='guides'){ h.append(el('button',{class:'hb',onclick:()=>go(S.backView||'day')},'‹ Back'), el('h1',{},'Guides'), el('div',{class:'phase'},'')); renderGuides(m); }
   document.querySelectorAll('#ribbon button').forEach(b=>{ if(b.dataset.act===S.act) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); b.querySelector('.dot')?.remove(); if(familiesOn(S.date).includes(b.dataset.act)) b.append(el('span',{class:'dot'})); });
 }
-document.getElementById('ribbon').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.act=b.dataset.act; save(); render(); $('#main').scrollTop=0; });
+document.getElementById('ribbon').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.act=b.dataset.act; S.startArm=null; S.clearArm=null; save(); render(); $('#main').scrollTop=0; });
 
 /* ---------- home ---------- */
 function renderHome(m){
   const d=S.date; const dt=parse(d);
+  const ub=updateBanner(); if(ub) m.append(ub);
   const bar=el('div',{class:'panel'},
     el('div',{class:'datebar'},
       el('button',{class:'arrow','aria-label':'Previous day',onclick:()=>{S.date=addDays(S.date,-1);S.calMonth=null;S.clearArm=null;save();render();}},'‹'),
@@ -382,9 +384,9 @@ function renderOther(m,date){
 /* ---------- gym (Stage 1, carried) ---------- */
 function renderGym(m,date){
   const w=weekNo(date); let ph=phaseOf(w);
-  if(ph===0){ m.append(el('div',{class:'panel stack'}, el('h2',{},'Before the programme'), el('p',{class:'small muted'},`Week 1 starts ${fmtLong(S.settings.programmeStart)}. A session logged before then is kept, but sits outside the phase clock; loads below are Phase 1 start loads.`))); ph=1; }
+  if(ph===0){ renderGymPre(m,date); return; }
   const phaseInfo=PROGRAMME.phases[ph-1];
-  const ids=dayIds(ph); const sess=sessionsOn(date).filter(sessionHasData); const active = sess[0]?sess[0].day : (S.dayOverride&&ids.includes(S.dayOverride)?S.dayOverride:nextDay(ids,date));
+  const ids=dayIds(ph); const sess=sessionsOn(date).filter(s=>s.day!=='pre'&&sessionHasData(s)); const active = sess[0]?sess[0].day : (S.dayOverride&&ids.includes(S.dayOverride)?S.dayOverride:nextDay(ids,date));
   const dayDef=dayById(active);
   const banner=el('div',{class:'panel stack',style:'--c:'+COLOR.gym},
     el('div',{class:'row between'}, el('div',{}, el('div',{class:'eyebrow'},w?`Week ${w}`:'Pre-programme'), el('h2',{},`Phase ${ph} · ${phaseInfo.weeks.replace('-','–').replace('9+','week 9+')}`.replace('· 1–3','· weeks 1–3').replace('· 4–8','· weeks 4–8')), el('div',{class:'small muted'},phaseInfo.load_rule)),
@@ -431,11 +433,28 @@ function renderGym(m,date){
     card.append(box);
   });
   m.append(card);
-  m.append(el('div',{class:'panel stack'}, el('h2',{},'Session comments'), el('textarea',{placeholder:'Concerns or issues — elbow or forearm, what felt off, what to change',onchange:e=>{s.comment=e.target.value;save();}},s.comment||'')));
+  m.append(el('div',{class:'panel stack'}, el('h2',{},'Session notes'), el('p',{class:'small muted',style:'margin:0'},'Anything beyond the sets — extra work done, how it felt, concerns (elbow or forearm), what to change next time.'), el('textarea',{placeholder:'e.g. finished with 1 km row; right elbow fine; pulldown felt heavy at 35',onchange:e=>{s.comment=e.target.value;save();}},s.comment||'')));
   m.append(pullupPanel(date));
   m.append(el('div',{class:'panel row between'}, el('span',{class:'small muted'},'Everything saves as you type. Sessions with no numbers are not kept.'), el('button',{class:'btn primary',onclick:()=>{ pruneEmpty(); toast('Saved'); go('home'); }},'Finish session')));
 }
-function nextDay(ids,date){ const past=S.sessions.filter(s=>s.date<date&&ids.includes(s.day)&&sessionHasData(s)).sort((a,b)=>a.date<b.date?1:-1)[0]; if(!past) return ids[0]; const i=ids.indexOf(past.day); return ids[(i+1)%ids.length]; }
+function startProgramme(fromDate){ S.settings.programmeStarted=true; S.settings.programmeStart=weekStart(fromDate); S.startArm=null; save(); }
+function preSession(date){ return S.sessions.find(x=>x.date===date&&x.day==='pre')||null; }
+function renderGymPre(m,date){
+  const started=S.settings.programmeStarted; const st=S.settings.programmeStart;
+  const p=el('div',{class:'panel stack',style:'--c:'+COLOR.gym}, el('h2',{},'Gym · pre-programme session'),
+    el('p',{class:'small muted',style:'margin:0'}, started?`The programme started ${fmtLong(st)}; this date is before it. Sessions here are counted but sit outside the phase clock.`:'The programme has not started. Log what you did — rowing, pull-up practice, a few lifts — as a note; it counts as a gym session in the trends.'));
+  const e=preSession(date);
+  p.append(el('button',{class:'toggle','aria-pressed':String(!!e),onclick:()=>{ if(e){ S.sessions=S.sessions.filter(x=>x!==e); save(); toast('Removed'); } else { S.sessions.push({date,day:'pre',bodyweight:'',sets:{},comment:''}); S.sessions.sort((a,b)=>a.date<b.date?-1:1); save(); toast('Logged'); } render(); }}, el('span',{class:'box'},e?'✓':''), e?`Gym session logged ${date===today()?'today':fmt(date)}`:`Log a gym session for ${date===today()?'today':fmt(date)}`));
+  if(e){ p.classList.add('logged');
+    p.append(el('label',{class:'f'},'What you did', el('textarea',{placeholder:'e.g. 2 km row, assisted pull-up practice at 45 kg, light squats',onchange:ev=>{e.comment=ev.target.value;save();}},e.comment||'')));
+    p.append(el('div',{class:'row'}, el('label',{class:'f'},'Bodyweight (kg)', el('input',{type:'number',step:'0.1',inputmode:'decimal',value:e.bodyweight||'',onchange:ev=>{e.bodyweight=ev.target.value;save();}})), el('button',{class:'btn small',style:'align-self:flex-end',onclick:()=>{S.backView='day';go('guides');}},'Guides'))); }
+  m.append(p);
+  if(!started){ const armed=S.startArm===date; const ws=weekStart(date);
+    m.append(el('div',{class:'panel stack'}, el('h2',{},'Start the programme'), el('p',{class:'small muted',style:'margin:0'},`When you are ready. Week 1 will be the week beginning ${fmtLong(ws)} (Phase 1, weeks 1–3: 2 working sets, about 60% of your Sheet4 loads). Pre-programme sessions stay in the record. Can be undone under More.`),
+      el('button',{class:'btn'+(armed?' primary':''),onclick:()=>{ if(!armed){ S.startArm=date; render(); return; } startProgramme(date); render(); toast('Programme started — week 1 from '+fmt(ws)); }}, armed?'Tap again to start the programme':'Start the programme'))); }
+  m.append(pullupPanel(date));
+}
+function nextDay(ids,date){ const past=S.sessions.filter(s=>s.date<date&&s.day!=='pre'&&ids.includes(s.day)&&sessionHasData(s)).sort((a,b)=>a.date<b.date?1:-1)[0]; if(!past) return ids[0]; const i=ids.indexOf(past.day); return ids[(i+1)%ids.length]; }
 function pruneEmpty(){ S.sessions=S.sessions.filter(sessionHasData); save(); }
 function mmss(n){ return String(Math.floor(n/60))+':'+String(n%60).padStart(2,'0'); }
 function startTimer(sec){ clearInterval(TIMER.h); TIMER.left=sec; TIMER.total=sec; const t=$('#timer'); if(t){t.textContent=mmss(sec);t.classList.remove('done');}
@@ -445,7 +464,7 @@ function startTimer(sec){ clearInterval(TIMER.h); TIMER.left=sec; TIMER.total=se
 function pullupSeries(){ const out=[]; S.sessions.forEach(s=>{ ['assisted-pull-ups-neutral-grip','assisted-pull-ups-negatives'].forEach(k=>{ if(s.sets[k]){ const ws=s.sets[k].map(x=>parseFloat(x.w)).filter(x=>!isNaN(x)); const rs=s.sets[k].map(x=>parseInt(x.r)).filter(x=>!isNaN(x)); if(ws.length) out.push({date:s.date,assist:Math.min(...ws),reps:rs.length?Math.max(...rs):null}); } }); }); return out.sort((a,b)=>a.date<b.date?-1:1); }
 function pullupPanel(date){
   const ser=pullupSeries(); const last=ser[ser.length-1];
-  const start=S.settings.programmeStart; const win=start?[addMonths(start,4),addMonths(start,6)]:null;
+  const start=S.settings.programmeStarted?S.settings.programmeStart:null; const win=start?[addMonths(start,4),addMonths(start,6)]:null;
   const d=el('details',{class:'panel',open:S.pullOpen?'':null,ontoggle:e=>{S.pullOpen=e.target.open;save();}}, el('summary',{class:'eyebrow',style:'cursor:pointer;font-size:15px'},'The pull-up project'));
   const body=el('div',{class:'stack',style:'margin-top:8px'},
     el('div',{class:'kpis'}, kpi(last?last.assist+' kg':'—','current assist'), kpi(last&&last.reps!=null?last.reps:'—','best reps'), kpi(S.pullupTests.length?Math.max(...S.pullupTests.map(t=>+t.reps||0)):'—','strict reps'), kpi(win?fmt(win[0])+' – '+fmt(win[1]):'—','first-rep window')),
@@ -487,7 +506,7 @@ function trendGym(m){
   const nextPhase= ph===1?{w:4,ph:2}: ph===2?{w:9,ph:3}:null; const st=S.settings.programmeStart;
   m.append(el('div',{class:'panel stack',style:'--c:'+COLOR.gym}, el('h2',{},'Gym'),
     el('div',{class:'kpis'}, kpi(occ.length,'sessions',COLOR.gym), kpi(ph?`P${ph} · W${wk}`:'—','phase · week',COLOR.gym), kpi(bwLatest()||'—','bodyweight',COLOR.gym), kpi(weekStreak('gym')?weekStreak('gym').n+' wk':'—','streak',COLOR.gym)),
-    el('div',{class:'small muted'}, ph? (nextPhase?`Week ${wk} of the programme (started ${fmtLong(st)}). Phase ${nextPhase.ph} opens ${fmtLong(addDays(st,(nextPhase.w-1)*7))}, in ${daysBetween(today(),addDays(st,(nextPhase.w-1)*7))} days.`:`Week ${wk} — Phase 3, the three-day split.`) : `Programme starts ${fmtLong(st)}.`)));
+    el('div',{class:'small muted'}, ph? (nextPhase?`Week ${wk} of the programme (started ${fmtLong(st)}). Phase ${nextPhase.ph} opens ${fmtLong(addDays(st,(nextPhase.w-1)*7))}, in ${daysBetween(today(),addDays(st,(nextPhase.w-1)*7))} days.`:`Week ${wk} — Phase 3, the three-day split.`) : (S.settings.programmeStarted&&st?`Programme starts ${fmtLong(st)}.`:`Pre-programme: ${S.sessions.filter(s=>s.day==='pre'&&sessionHasData(s)).length} warm-up session${S.sessions.filter(s=>s.day==='pre'&&sessionHasData(s)).length===1?'':'s'} logged. Start the programme from the Gym screen when ready.`))));
   m.append(el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Sessions per week · last 8 weeks'), barChart(weeklyCounts('gym'),{color:COLOR.gym,target:S.settings.targets.gym||null})));
   const keys=allExerciseKeys(); const logged=[...keys.keys()].filter(k=>S.sessions.some(s=>s.sets[k]&&s.sets[k].some(x=>x.w!=='')));
   const pick=S.histKey&&logged.includes(S.histKey)?S.histKey:logged[0];
@@ -554,7 +573,7 @@ function describe(e){ switch(e.type){
   default: return e.type; } }
 function logList(kind){
   const rows=[]; S.entries.forEach(e=>{ if(!kind||e.type===kind) rows.push({date:e.date,kind:e.type,text:describe(e),e}); });
-  if(!kind) S.sessions.filter(sessionHasData).forEach(s=>rows.push({date:s.date,kind:'gym',text:`Day ${s.day}`+(s.bodyweight?' · '+s.bodyweight+' kg':''),s}));
+  if(!kind) S.sessions.filter(sessionHasData).forEach(s=>rows.push({date:s.date,kind:'gym',text:(s.day==='pre'?'pre-programme'+(s.comment?' — '+s.comment.slice(0,40):''):`Day ${s.day}`)+(s.bodyweight?' · '+s.bodyweight+' kg':''),s}));
   rows.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
   const p=el('div',{class:'panel stack'}, el('h2',{},kind?LABEL[kind]+' log':'Log'));
   if(!rows.length) p.append(el('p',{class:'small muted'},'Nothing logged yet.'));
@@ -568,7 +587,7 @@ function sessionList(){
   const list=el('div',{class:'panel stack'}, el('h2',{},'Sessions'));
   if(!ses.length) list.append(el('p',{class:'small muted'},'Nothing logged yet.'));
   ses.forEach(s=>{ const rows=Object.entries(s.sets).filter(([k,a])=>a.some(x=>x.w!==''||x.r!=='')).map(([k,a])=>`${(keys.get(k)||{name:k}).name}: ${a.filter(x=>x.w!==''||x.r!=='').map(x=>`${x.w||'–'}×${x.r||'–'}`).join(', ')}`);
-    list.append(el('details',{class:'guide'}, el('summary',{}, el('span',{},`${fmt(s.date)} · Day ${s.day}`), el('span',{class:'rx'},`${rows.length} exercises${s.bodyweight?' · '+s.bodyweight+' kg':''}`)), el('ul',{},...rows.map(r=>el('li',{},r))), s.comment?el('div',{class:'note small'},s.comment):null, el('div',{class:'row',style:'margin-top:6px'}, el('button',{class:'btn small ghost',onclick:()=>{ S.date=s.date; S.act='gym'; S.dayOverride=s.day; go('day'); }},'Open'), el('button',{class:'btn small ghost',onclick:()=>{ S.sessions=S.sessions.filter(x=>x!==s); save(); render(); toast('Session removed'); }},'Delete')))); });
+    list.append(el('details',{class:'guide'}, el('summary',{}, el('span',{},`${fmt(s.date)} · ${s.day==='pre'?'Pre-programme':'Day '+s.day}`), el('span',{class:'rx'},s.day==='pre'?((s.comment||'').slice(0,40)+((s.comment||'').length>40?'…':'')+(s.bodyweight?' · '+s.bodyweight+' kg':'')):`${rows.length} exercises${s.bodyweight?' · '+s.bodyweight+' kg':''}`)), el('ul',{},...rows.map(r=>el('li',{},r))), s.comment?el('div',{class:'note small'},s.comment):null, el('div',{class:'row',style:'margin-top:6px'}, el('button',{class:'btn small ghost',onclick:()=>{ S.date=s.date; S.act='gym'; if(s.day!=='pre') S.dayOverride=s.day; go('day'); }},'Open'), el('button',{class:'btn small ghost',onclick:()=>{ S.sessions=S.sessions.filter(x=>x!==s); save(); render(); toast('Session removed'); }},'Delete')))); });
   return list;
 }
 function allExerciseKeys(){ const seen=new Map(); PROGRAMME.days.forEach(d=>d.exercises.forEach(e=>{ const k=exKey(e.name); if(!seen.has(k)) seen.set(k,e); })); return seen; }
@@ -621,9 +640,13 @@ const sec=(h,items)=>items&&items.length?el('div',{},el('h4',{},h),el('ul',{},..
 /* ---------- more: settings, rules, export, backup ---------- */
 function renderMore(m){
   const st=S.settings;
-  m.append(el('div',{class:'panel stack'}, el('h2',{},'Programme clock'),
-    el('div',{class:'row'}, el('label',{class:'f'},'Week 1 starts (a Monday)', el('input',{type:'date',value:st.programmeStart||'',onchange:e=>{ if(e.target.value){ st.programmeStart=e.target.value; save(); render(); } }}))),
-    el('div',{class:'small muted'}, `Weeks run Monday to Sunday from this date. Phase 2 opens ${fmtLong(addDays(st.programmeStart,21))}; Phase 3 ${fmtLong(addDays(st.programmeStart,56))}. A session logged on an earlier date is kept but sits outside the clock.`)));
+  const pc=el('div',{class:'panel stack'}, el('h2',{},'Programme clock'));
+  if(st.programmeStarted&&st.programmeStart){ const armed=S.unstartArm===true;
+    pc.append(el('div',{class:'row'}, el('label',{class:'f'},'Week 1 starts (a Monday)', el('input',{type:'date',value:st.programmeStart||'',onchange:e=>{ if(e.target.value){ st.programmeStart=weekStart(e.target.value); save(); render(); } }}))),
+      el('div',{class:'small muted'}, `Weeks run Monday to Sunday from this date (a chosen date snaps to its Monday). Phase 2 opens ${fmtLong(addDays(st.programmeStart,21))}; Phase 3 ${fmtLong(addDays(st.programmeStart,56))}. A session logged on an earlier date is kept as a pre-programme session.`),
+      el('div',{}, el('button',{class:'btn small'+(armed?' primary':' ghost'),onclick:()=>{ if(!armed){ S.unstartArm=true; render(); return; } st.programmeStarted=false; st.programmeStart=null; S.unstartArm=null; save(); render(); toast('Back to pre-programme'); }}, armed?'Tap again to return to pre-programme':'Return to pre-programme'))); }
+  else pc.append(el('div',{class:'small muted'},'Not started. Gym sessions log as pre-programme sessions (a note of what you did) until you tap Start the programme on the Gym screen; week 1 is then the week of that Monday.'));
+  m.append(pc);
   const tg=el('div',{class:'panel stack'}, el('h2',{},'Weekly targets'), el('p',{class:'small muted',style:'margin:0'},'Times per week. 0 means no target — the activity is still counted.'));
   tg.append(el('div',{class:'row'}, ...ACTS.map(a=>el('label',{class:'f',style:'min-width:56px;color:'+COLOR[a]},LABEL[a], el('input',{type:'number',min:'0',step:'1',inputmode:'numeric',value:st.targets[a]??0,onchange:e=>{st.targets[a]=Math.max(0,parseInt(e.target.value)||0);save();}})))));
   m.append(tg);
@@ -650,33 +673,52 @@ function renderMore(m){
   if(S.migrated) bk.append(el('div',{class:'small muted'},`Converted from version 1 on ${fmtLong(S.migrated.on)}: ${S.migrated.counts.sessions} gym sessions, ${S.migrated.counts.climbs} climb dates, ${S.migrated.counts.tests} pull-up tests${S.migrated.counts.flares?', '+S.migrated.counts.flares+' elbow-flare dates (now comments)':''}. The version 1 record is still on the phone, untouched.`));
   bk.append(el('div',{class:'small muted'},'Installed from Chrome on Android: menu ⋮ → "Add to Home screen" / "Install app".'));
   m.append(bk);
-  m.append(el('div',{class:'small muted',style:'text-align:center'},'GT Fit · version 2.0 · programme of 27 July 2026'));
+  const vp=el('div',{class:'panel stack'}, el('h2',{},'App version'), el('p',{class:'small muted',style:'margin:0'},`Installed: version ${APP_VERSION}. The app fetches the latest copy from GitHub each time it opens with a connection; use the check to pull a new upload straight away. Your log is not touched by an update.`),
+    el('div',{class:'row'}, el('button',{class:'btn',onclick:()=>checkUpdate(false)}, UPD.state==='checking'?'Checking…':'Check for update'), UPD.state==='available'?el('button',{class:'btn primary',onclick:applyUpdate},'Update to '+UPD.latest):null),
+    el('div',{class:'small muted'}, UPD.state==='current'?'Up to date.':UPD.state==='available'?`Version ${UPD.latest} is on GitHub.`:UPD.state==='offline'?'Offline — connect to check.':UPD.state==='error'?'Could not reach GitHub.':UPD.state==='unknown'?'The copy on GitHub carries no version stamp (older than 2.2).':''));
+  m.append(vp);
+  m.append(el('div',{class:'small muted',style:'text-align:center'},`GT Fit · version ${APP_VERSION} · programme of 27 July 2026`));
 }
 async function copyOrShow(t,boxId,msg){ try{ await navigator.clipboard.writeText(t); toast(msg); }catch(e){ const b=$('#'+boxId); b.hidden=false; b.value=t; toast('Select and copy below'); } }
 function exportSheet5(){
   const keys=allExerciseKeys(); const ses=S.sessions.filter(sessionHasData).sort((a,b)=>a.date<b.date?-1:1);
-  const hdr=['Exercise ('+(S.settings.barMode==='plates'?'barbell loads: plates only':'barbell loads: total incl. '+BAR+' kg bar')+')', ...ses.flatMap(s=>[s.date+' D'+s.day,''])];
+  const hdr=['Exercise ('+(S.settings.barMode==='plates'?'barbell loads: plates only':'barbell loads: total incl. '+BAR+' kg bar')+')', ...ses.flatMap(s=>[s.date+(s.day==='pre'?' pre':' D'+s.day),''])];
   const lines=[hdr.join('\t'), ['Bodyweight (kg)',...ses.flatMap(s=>[s.bodyweight||'',''])].join('\t')];
   PROGRAMME.days.forEach(d=>{ lines.push(d.title.toUpperCase()); d.exercises.forEach(e=>{ const k=exKey(e.name); const maxSets=Math.max(1,...ses.map(s=>(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='').length));
     for(let i=0;i<maxSets;i++){ lines.push([i===0?`${e.name} ${e.sets}x${e.reps}`:'', ...ses.flatMap(s=>{ const st=(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='')[i]; return st?[st.w,st.r]:['','']; })].join('\t')); } }); });
-  lines.push('COMMENTS', ['', ...ses.flatMap(s=>[(s.comment||'').replace(/\s+/g,' '),''])].join('\t'));
+  lines.push('NOTES', ['', ...ses.flatMap(s=>[(s.comment||'').replace(/\s+/g,' '),''])].join('\t'));
   return lines.join('\n');
 }
 function exportActivities(){
   const rows=[['date','activity','detail','distance_km','note']];
-  S.sessions.filter(sessionHasData).forEach(s=>rows.push([s.date,'gym','Day '+s.day+(s.bodyweight?' · '+s.bodyweight+' kg':''),'',(s.comment||'')]));
+  S.sessions.filter(sessionHasData).forEach(s=>rows.push([s.date,'gym',(s.day==='pre'?'pre-programme':'Day '+s.day)+(s.bodyweight?' · '+s.bodyweight+' kg':''),'',(s.comment||'')]));
   S.entries.forEach(e=>{ const detail=describe(e); rows.push([e.date,e.type,e.type==='stretch'?'stretched':detail.replace(/ · [\d.]+ km$/,''),e.distance||'',e.type==='stretch'?(e.note||''):(e.type==='swim'||e.type==='custom'?'':(e.note||''))]); });
   rows.sort((a,b)=>a===rows[0]?-1:b===rows[0]?1:(a[0]<b[0]?-1:a[0]>b[0]?1:0));
   return rows.map(r=>r.map(x=>String(x).replace(/\t|\n/g,' ')).join('\t')).join('\n');
 }
 
+/* ---------- update check (GitHub Pages serves the live copy) ---------- */
+let UPD={state:'idle',latest:null};
+async function checkUpdate(silent){
+  if(!navigator.onLine){ UPD.state='offline'; if(!silent) toast('Offline — cannot reach GitHub'); return; }
+  UPD.state='checking'; if(!silent) render();
+  try{ const r=await fetch('index.html?u='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); const t=await r.text(); const m=t.match(/gtfit-version" content="([^"]+)"/); UPD.latest=m?m[1]:null;
+    UPD.state= !UPD.latest?'unknown' : (UPD.latest===APP_VERSION?'current':'available'); }
+  catch(e){ UPD.state='error'; }
+  if(!silent||UPD.state==='available') render();
+  if(!silent){ toast(UPD.state==='current'?'Up to date — v'+APP_VERSION:UPD.state==='available'?'Version '+UPD.latest+' is available':UPD.state==='error'?'Could not reach GitHub':'Version not readable'); }
+}
+async function applyUpdate(){ try{ if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } const reg=await navigator.serviceWorker?.getRegistration?.(); if(reg){ await reg.update().catch(()=>{}); } }catch(e){} location.reload(); }
+function updateBanner(){ if(UPD.state!=='available') return null; return el('div',{class:'flag good row between'}, el('span',{},`Update available — version ${UPD.latest} (you have ${APP_VERSION}).`), el('button',{class:'btn small primary',onclick:applyUpdate},'Update now')); }
+
 /* ---------- boot ---------- */
 load();
-S.date=today(); S.view='home'; S.calMonth=null; S.calOpen=false; S.clearArm=null; // start-up always opens Home, at today
+S.date=today(); S.view='home'; S.calMonth=null; S.calOpen=false; S.clearArm=null; S.startArm=null; S.unstartArm=null; // start-up always opens Home, at today
 function start(hot){ if(hot&&hot.S) S=Object.assign(blank(),hot.S); render(); }
 try{ window.claude?.hot?.snapshot?.(()=>({S})); }catch(e){}
 (window.claude?.hot?.ready) ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){} }
+if(location.protocol!=='file:') setTimeout(()=>checkUpdate(true),1500);
 </script>
 
 </body>
