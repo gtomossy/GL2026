@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}</style>
 <title>GT Fit</title>
-<meta name="gtfit-version" content="2.2">
+<meta name="gtfit-version" content="2.3">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2430">
 <meta name="mobile-web-app-capable" content="yes">
@@ -192,7 +192,7 @@ const GUIDES = [{"id": "squat", "title": "Barbell Back Squat", "rx": "3×8–10 
 </script>
 <script>
 /* ---------- constants ---------- */
-const APP_VERSION='2.2'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
+const APP_VERSION='2.3'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
 const ACTS=['walk','stretch','gym','climb','other'];
 const OTHERS=['cycle','hike','swim','custom'];
 const FAMILY=k=>OTHERS.includes(k)?'other':k;               // colour family of a kind
@@ -405,33 +405,7 @@ function renderGym(m,date){
     el('button',{class:'btn small',onclick:()=>{S.backView='day';go('guides');}},'Guides')));
   const card=el('div',{class:'panel'});
   card.append(el('h2',{},'Day '+active), el('div',{class:'small muted'},'Warm-up: 1 km easy row, then one light feeder set of the first exercise. Rests 90–120 s.'));
-  dayDef.exercises.forEach(ex=>{
-    if(ex.phase_from && ph<ex.phase_from) { card.append(el('div',{class:'ex'}, el('div',{class:'head'}, el('div',{}, el('h3',{class:'muted'},ex.name), el('div',{class:'rx'},`Enters in Phase ${ex.phase_from}`))))); return; }
-    const key=exKey(ex.name); const n=setsFor(ex,ph); const sug=suggestLoad(ex,date,ph);
-    if(!s.sets[key]) s.sets[key]=Array.from({length:n},()=>({w:'',r:''}));
-    while(s.sets[key].length<n) s.sets[key].push({w:'',r:''});
-    const assist=ex.log==='assistance|reps'; const g=guideFor(ex);
-    const box=el('div',{class:'ex'});
-    box.append(el('div',{class:'head'}, el('div',{}, el('h3',{},ex.name), el('div',{class:'rx'},`${n}×${ex.reps}${ex.note?' · '+ex.note:''}${ex.rule?' · '+ex.rule:''}${ex.progression?' · '+ex.progression:''}`)), el('div',{class:'sug num'}, sug.v?(assist?sug.v+' kg assist':sug.v+' kg'):'')));
-    const grid=el('div',{class:'sets'}, el('div'),el('div',{class:'lab'},assist?'Assist kg':'kg'),el('div',{class:'lab'},'reps'),el('div'));
-    s.sets[key].forEach((st,i)=>{
-      const wi=el('input',{type:'number',step:'0.25',inputmode:'decimal',placeholder:sug.v||'',value:st.w,'aria-label':`${ex.name} set ${i+1} weight`,onchange:e=>{st.w=e.target.value;mark();save();}});
-      const ri=el('input',{type:'number',step:'1',inputmode:'numeric',placeholder:ex.reps.split(/[^0-9]/)[0]||'',value:st.r,'aria-label':`${ex.name} set ${i+1} reps`,onchange:e=>{st.r=e.target.value;mark();save();}});
-      const mark=()=>{ const d=st.w!==''||st.r!==''; wi.classList.toggle('done',d); ri.classList.toggle('done',d); }; mark();
-      const cp=el('button',{class:'cp',title:'Copy previous set','aria-label':'Copy previous set',onclick:()=>{ const p=i?s.sets[key][i-1]:{w:sug.v,r:''}; st.w=p.w; st.r=p.r||st.r; wi.value=st.w; ri.value=st.r; mark(); save(); }},'⤶');
-      grid.append(el('div',{class:'n'},i+1),wi,ri,cp);
-    });
-    box.append(grid);
-    if(isBarbell(ex.name)){ const bl=el('div',{class:'bar num'},barText((s.sets[key].map(x=>x.w).filter(x=>x!=='').slice(-1)[0])||sug.v)); box.append(bl); grid.addEventListener('input',e=>{ if(e.target.matches('input') && e.target.getAttribute('aria-label').endsWith('weight')) bl.textContent=barText(e.target.value); }); }
-    if(isEZ(ex.name)) box.append(el('div',{class:'bar'},'EZ-bar — logged as a total (bar plus plates), as in your last block; the 20 kg bar maths does not apply.'));
-    const tools=el('div',{class:'tools'}, el('button',{class:'btn small ghost',onclick:()=>{s.sets[key].push({w:'',r:''});save();render();}},'+ set'));
-    if(g) tools.append(el('button',{class:'btn small ghost',onclick:()=>{S.backView='day';S.openGuide=g.id;go('guides');}},'Guide'));
-    if(g) tools.append(el('a',{class:'btn small ghost',href:g.video,target:'_blank',rel:'noopener',title:g.videoLabel},'▶ '+(g.videoTag||'Video')));
-    if(g&&g.bro) tools.append(el('a',{class:'btn small ghost',href:g.bro,target:'_blank',rel:'noopener',title:g.broLabel},'▶ BRO'));
-    box.append(tools);
-    box.append(el('div',{class:'hint'},'Suggested: '+sug.why + (ex.log?' · log '+ex.log:'')));
-    card.append(box);
-  });
+  exerciseCards(card,dayDef,s,date,ph);
   m.append(card);
   m.append(el('div',{class:'panel stack'}, el('h2',{},'Session notes'), el('p',{class:'small muted',style:'margin:0'},'Anything beyond the sets — extra work done, how it felt, concerns (elbow or forearm), what to change next time.'), el('textarea',{placeholder:'e.g. finished with 1 km row; right elbow fine; pulldown felt heavy at 35',onchange:e=>{s.comment=e.target.value;save();}},s.comment||'')));
   m.append(pullupPanel(date));
@@ -449,10 +423,47 @@ function renderGymPre(m,date){
     p.append(el('label',{class:'f'},'What you did', el('textarea',{placeholder:'e.g. 2 km row, assisted pull-up practice at 45 kg, light squats',onchange:ev=>{e.comment=ev.target.value;save();}},e.comment||'')));
     p.append(el('div',{class:'row'}, el('label',{class:'f'},'Bodyweight (kg)', el('input',{type:'number',step:'0.1',inputmode:'decimal',value:e.bodyweight||'',onchange:ev=>{e.bodyweight=ev.target.value;save();}})), el('button',{class:'btn small',style:'align-self:flex-end',onclick:()=>{S.backView='day';go('guides');}},'Guides'))); }
   m.append(p);
+  if(e){ // optional: some or all of a Phase 1 day's exercises
+    const plan=e.plan||'';
+    const pp=el('div',{class:'panel stack',style:'--c:'+COLOR.gym}, el('h2',{},'Programme exercises'), el('p',{class:'small muted',style:'margin:0'},'Optional. Pick a day from Phase 1 of the programme and log the exercises you did — some or all; empty rows are ignored. Loads are the Phase 1 start loads (2 working sets, about 60% of your Sheet4 loads), or your last logged load once you have one.'),
+      el('div',{class:'seg',role:'group','aria-label':'Programme day'}, ...[['','None'],['A','Day A'],['B','Day B']].map(([v,l])=>el('button',{'aria-pressed':String(plan===v),onclick:()=>{ e.plan=v; save(); render(); }},l))));
+    if(plan){ const dayDef=dayById(plan); if(dayDef){
+      pp.append(el('div',{class:'row'}, el('div',{class:'timer num',id:'timer'},TIMER.left?mmss(TIMER.left):'—'), el('button',{class:'btn small',onclick:()=>startTimer(90)},'Rest 90'), el('button',{class:'btn small',onclick:()=>startTimer(120)},'Rest 120'), el('span',{class:'small muted'},'Warm-up: 1 km easy row, then one light feeder set.')));
+      const card=el('div',{}); exerciseCards(card,dayDef,e,date,1,{hideFuture:true}); pp.append(card); } }
+    m.append(pp); }
   if(!started){ const armed=S.startArm===date; const ws=weekStart(date);
     m.append(el('div',{class:'panel stack'}, el('h2',{},'Start the programme'), el('p',{class:'small muted',style:'margin:0'},`When you are ready. Week 1 will be the week beginning ${fmtLong(ws)} (Phase 1, weeks 1–3: 2 working sets, about 60% of your Sheet4 loads). Pre-programme sessions stay in the record. Can be undone under More.`),
       el('button',{class:'btn'+(armed?' primary':''),onclick:()=>{ if(!armed){ S.startArm=date; render(); return; } startProgramme(date); render(); toast('Programme started — week 1 from '+fmt(ws)); }}, armed?'Tap again to start the programme':'Start the programme'))); }
   m.append(pullupPanel(date));
+}
+function exerciseCards(card,dayDef,s,date,ph,opts={}){
+dayDef.exercises.forEach(ex=>{
+  if(ex.phase_from && ph<ex.phase_from) { if(opts.hideFuture) return; card.append(el('div',{class:'ex'}, el('div',{class:'head'}, el('div',{}, el('h3',{class:'muted'},ex.name), el('div',{class:'rx'},`Enters in Phase ${ex.phase_from}`))))); return; }
+  const key=exKey(ex.name); const n=setsFor(ex,ph); const sug=suggestLoad(ex,date,ph);
+  if(!s.sets[key]) s.sets[key]=Array.from({length:n},()=>({w:'',r:''}));
+  while(s.sets[key].length<n) s.sets[key].push({w:'',r:''});
+  const assist=ex.log==='assistance|reps'; const g=guideFor(ex);
+  const box=el('div',{class:'ex'});
+  box.append(el('div',{class:'head'}, el('div',{}, el('h3',{},ex.name), el('div',{class:'rx'},`${n}×${ex.reps}${ex.note?' · '+ex.note:''}${ex.rule?' · '+ex.rule:''}${ex.progression?' · '+ex.progression:''}`)), el('div',{class:'sug num'}, sug.v?(assist?sug.v+' kg assist':sug.v+' kg'):'')));
+  const grid=el('div',{class:'sets'}, el('div'),el('div',{class:'lab'},assist?'Assist kg':'kg'),el('div',{class:'lab'},'reps'),el('div'));
+  s.sets[key].forEach((st,i)=>{
+    const wi=el('input',{type:'number',step:'0.25',inputmode:'decimal',placeholder:sug.v||'',value:st.w,'aria-label':`${ex.name} set ${i+1} weight`,onchange:e=>{st.w=e.target.value;mark();save();}});
+    const ri=el('input',{type:'number',step:'1',inputmode:'numeric',placeholder:ex.reps.split(/[^0-9]/)[0]||'',value:st.r,'aria-label':`${ex.name} set ${i+1} reps`,onchange:e=>{st.r=e.target.value;mark();save();}});
+    const mark=()=>{ const d=st.w!==''||st.r!==''; wi.classList.toggle('done',d); ri.classList.toggle('done',d); }; mark();
+    const cp=el('button',{class:'cp',title:'Copy previous set','aria-label':'Copy previous set',onclick:()=>{ const p=i?s.sets[key][i-1]:{w:sug.v,r:''}; st.w=p.w; st.r=p.r||st.r; wi.value=st.w; ri.value=st.r; mark(); save(); }},'⤶');
+    grid.append(el('div',{class:'n'},i+1),wi,ri,cp);
+  });
+  box.append(grid);
+  if(isBarbell(ex.name)){ const bl=el('div',{class:'bar num'},barText((s.sets[key].map(x=>x.w).filter(x=>x!=='').slice(-1)[0])||sug.v)); box.append(bl); grid.addEventListener('input',e=>{ if(e.target.matches('input') && e.target.getAttribute('aria-label').endsWith('weight')) bl.textContent=barText(e.target.value); }); }
+  if(isEZ(ex.name)) box.append(el('div',{class:'bar'},'EZ-bar — logged as a total (bar plus plates), as in your last block; the 20 kg bar maths does not apply.'));
+  const tools=el('div',{class:'tools'}, el('button',{class:'btn small ghost',onclick:()=>{s.sets[key].push({w:'',r:''});save();render();}},'+ set'));
+  if(g) tools.append(el('button',{class:'btn small ghost',onclick:()=>{S.backView='day';S.openGuide=g.id;go('guides');}},'Guide'));
+  if(g) tools.append(el('a',{class:'btn small ghost',href:g.video,target:'_blank',rel:'noopener',title:g.videoLabel},'▶ '+(g.videoTag||'Video')));
+  if(g&&g.bro) tools.append(el('a',{class:'btn small ghost',href:g.bro,target:'_blank',rel:'noopener',title:g.broLabel},'▶ BRO'));
+  box.append(tools);
+  box.append(el('div',{class:'hint'},'Suggested: '+sug.why + (ex.log?' · log '+ex.log:'')));
+  card.append(box);
+});
 }
 function nextDay(ids,date){ const past=S.sessions.filter(s=>s.date<date&&s.day!=='pre'&&ids.includes(s.day)&&sessionHasData(s)).sort((a,b)=>a.date<b.date?1:-1)[0]; if(!past) return ids[0]; const i=ids.indexOf(past.day); return ids[(i+1)%ids.length]; }
 function pruneEmpty(){ S.sessions=S.sessions.filter(sessionHasData); save(); }
@@ -573,7 +584,7 @@ function describe(e){ switch(e.type){
   default: return e.type; } }
 function logList(kind){
   const rows=[]; S.entries.forEach(e=>{ if(!kind||e.type===kind) rows.push({date:e.date,kind:e.type,text:describe(e),e}); });
-  if(!kind) S.sessions.filter(sessionHasData).forEach(s=>rows.push({date:s.date,kind:'gym',text:(s.day==='pre'?'pre-programme'+(s.comment?' — '+s.comment.slice(0,40):''):`Day ${s.day}`)+(s.bodyweight?' · '+s.bodyweight+' kg':''),s}));
+  if(!kind) S.sessions.filter(sessionHasData).forEach(s=>rows.push({date:s.date,kind:'gym',text:(s.day==='pre'?'pre-programme'+(s.plan?' (Day '+s.plan+' exercises)':'')+(s.comment?' — '+s.comment.slice(0,40):''):`Day ${s.day}`)+(s.bodyweight?' · '+s.bodyweight+' kg':''),s}));
   rows.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
   const p=el('div',{class:'panel stack'}, el('h2',{},kind?LABEL[kind]+' log':'Log'));
   if(!rows.length) p.append(el('p',{class:'small muted'},'Nothing logged yet.'));
@@ -587,7 +598,7 @@ function sessionList(){
   const list=el('div',{class:'panel stack'}, el('h2',{},'Sessions'));
   if(!ses.length) list.append(el('p',{class:'small muted'},'Nothing logged yet.'));
   ses.forEach(s=>{ const rows=Object.entries(s.sets).filter(([k,a])=>a.some(x=>x.w!==''||x.r!=='')).map(([k,a])=>`${(keys.get(k)||{name:k}).name}: ${a.filter(x=>x.w!==''||x.r!=='').map(x=>`${x.w||'–'}×${x.r||'–'}`).join(', ')}`);
-    list.append(el('details',{class:'guide'}, el('summary',{}, el('span',{},`${fmt(s.date)} · ${s.day==='pre'?'Pre-programme':'Day '+s.day}`), el('span',{class:'rx'},s.day==='pre'?((s.comment||'').slice(0,40)+((s.comment||'').length>40?'…':'')+(s.bodyweight?' · '+s.bodyweight+' kg':'')):`${rows.length} exercises${s.bodyweight?' · '+s.bodyweight+' kg':''}`)), el('ul',{},...rows.map(r=>el('li',{},r))), s.comment?el('div',{class:'note small'},s.comment):null, el('div',{class:'row',style:'margin-top:6px'}, el('button',{class:'btn small ghost',onclick:()=>{ S.date=s.date; S.act='gym'; if(s.day!=='pre') S.dayOverride=s.day; go('day'); }},'Open'), el('button',{class:'btn small ghost',onclick:()=>{ S.sessions=S.sessions.filter(x=>x!==s); save(); render(); toast('Session removed'); }},'Delete')))); });
+    list.append(el('details',{class:'guide'}, el('summary',{}, el('span',{},`${fmt(s.date)} · ${s.day==='pre'?'Pre-programme'+(s.plan?' · Day '+s.plan+' exercises':''):'Day '+s.day}`), el('span',{class:'rx'},s.day==='pre'?((rows.length?rows.length+' exercises · ':'')+(s.comment||'').slice(0,40)+((s.comment||'').length>40?'…':'')+(s.bodyweight?' · '+s.bodyweight+' kg':'')):`${rows.length} exercises${s.bodyweight?' · '+s.bodyweight+' kg':''}`)), el('ul',{},...rows.map(r=>el('li',{},r))), s.comment?el('div',{class:'note small'},s.comment):null, el('div',{class:'row',style:'margin-top:6px'}, el('button',{class:'btn small ghost',onclick:()=>{ S.date=s.date; S.act='gym'; if(s.day!=='pre') S.dayOverride=s.day; go('day'); }},'Open'), el('button',{class:'btn small ghost',onclick:()=>{ S.sessions=S.sessions.filter(x=>x!==s); save(); render(); toast('Session removed'); }},'Delete')))); });
   return list;
 }
 function allExerciseKeys(){ const seen=new Map(); PROGRAMME.days.forEach(d=>d.exercises.forEach(e=>{ const k=exKey(e.name); if(!seen.has(k)) seen.set(k,e); })); return seen; }
@@ -682,7 +693,7 @@ function renderMore(m){
 async function copyOrShow(t,boxId,msg){ try{ await navigator.clipboard.writeText(t); toast(msg); }catch(e){ const b=$('#'+boxId); b.hidden=false; b.value=t; toast('Select and copy below'); } }
 function exportSheet5(){
   const keys=allExerciseKeys(); const ses=S.sessions.filter(sessionHasData).sort((a,b)=>a.date<b.date?-1:1);
-  const hdr=['Exercise ('+(S.settings.barMode==='plates'?'barbell loads: plates only':'barbell loads: total incl. '+BAR+' kg bar')+')', ...ses.flatMap(s=>[s.date+(s.day==='pre'?' pre':' D'+s.day),''])];
+  const hdr=['Exercise ('+(S.settings.barMode==='plates'?'barbell loads: plates only':'barbell loads: total incl. '+BAR+' kg bar')+')', ...ses.flatMap(s=>[s.date+(s.day==='pre'?' pre'+(s.plan?' '+s.plan:''):' D'+s.day),''])];
   const lines=[hdr.join('\t'), ['Bodyweight (kg)',...ses.flatMap(s=>[s.bodyweight||'',''])].join('\t')];
   PROGRAMME.days.forEach(d=>{ lines.push(d.title.toUpperCase()); d.exercises.forEach(e=>{ const k=exKey(e.name); const maxSets=Math.max(1,...ses.map(s=>(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='').length));
     for(let i=0;i<maxSets;i++){ lines.push([i===0?`${e.name} ${e.sets}x${e.reps}`:'', ...ses.flatMap(s=>{ const st=(s.sets[k]||[]).filter(x=>x.w!==''||x.r!=='')[i]; return st?[st.w,st.r]:['','']; })].join('\t')); } }); });
@@ -691,7 +702,7 @@ function exportSheet5(){
 }
 function exportActivities(){
   const rows=[['date','activity','detail','distance_km','note']];
-  S.sessions.filter(sessionHasData).forEach(s=>rows.push([s.date,'gym',(s.day==='pre'?'pre-programme':'Day '+s.day)+(s.bodyweight?' · '+s.bodyweight+' kg':''),'',(s.comment||'')]));
+  S.sessions.filter(sessionHasData).forEach(s=>rows.push([s.date,'gym',(s.day==='pre'?'pre-programme'+(s.plan?' · Day '+s.plan+' exercises':''):'Day '+s.day)+(s.bodyweight?' · '+s.bodyweight+' kg':''),'',(s.comment||'')]));
   S.entries.forEach(e=>{ const detail=describe(e); rows.push([e.date,e.type,e.type==='stretch'?'stretched':detail.replace(/ · [\d.]+ km$/,''),e.distance||'',e.type==='stretch'?(e.note||''):(e.type==='swim'||e.type==='custom'?'':(e.note||''))]); });
   rows.sort((a,b)=>a===rows[0]?-1:b===rows[0]?1:(a[0]<b[0]?-1:a[0]>b[0]?1:0));
   return rows.map(r=>r.map(x=>String(x).replace(/\t|\n/g,' ')).join('\t')).join('\n');
