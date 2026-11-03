@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}</style>
 <title>GT Fit</title>
-<meta name="gtfit-version" content="2.4">
+<meta name="gtfit-version" content="2.5">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2430">
 <meta name="mobile-web-app-capable" content="yes">
@@ -203,7 +203,7 @@ const GUIDES = [{"id": "squat", "title": "Barbell Back Squat", "rx": "3×8–10 
 </script>
 <script>
 /* ---------- constants ---------- */
-const APP_VERSION='2.4'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
+const APP_VERSION='2.5'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
 const ACTS=['walk','stretch','gym','climb','cardio','other'];
 const OTHERS=['hike','swim','custom'];
 const MACHINES=['rower','treadmill','bike','ride'];
@@ -671,7 +671,7 @@ function trendGym(m){
   const wk=weekNo(today()); const ph=phaseOf(wk); const occ=occurrences('gym');
   const nextPhase= ph===1?{w:4,ph:2}: ph===2?{w:9,ph:3}:null; const st=S.settings.programmeStart;
   m.append(el('div',{class:'panel stack',style:'--c:'+COLOR.gym}, el('h2',{},'Gym'),
-    el('div',{class:'kpis'}, kpi(occ.length,'sessions',COLOR.gym), kpi(ph?`P${ph} · W${wk}`:'—','phase · week',COLOR.gym), kpi(bwLatest()||'—','bodyweight',COLOR.gym), kpi(weekStreak('gym')?weekStreak('gym').n+' wk':'—','streak',COLOR.gym)),
+    el('div',{class:'kpis'}, kpi(occ.length,'sessions',COLOR.gym), kpi(ph?`P${ph} · W${wk}`:'—','phase · week',COLOR.gym), kpi(weekStreak('gym')?weekStreak('gym').n+' wk':'—','streak',COLOR.gym), bodyKpi(COLOR.gym)),
     el('div',{class:'small muted'}, ph? (nextPhase?`Week ${wk} of the programme (started ${fmtLong(st)}). Phase ${nextPhase.ph} opens ${fmtLong(addDays(st,(nextPhase.w-1)*7))}, in ${daysBetween(today(),addDays(st,(nextPhase.w-1)*7))} days.`:`Week ${wk} — Phase 3, the three-day split.`) : (S.settings.programmeStarted&&st?`Programme starts ${fmtLong(st)}.`:`Pre-programme: ${S.sessions.filter(s=>s.day==='pre'&&sessionHasData(s)).length} warm-up session${S.sessions.filter(s=>s.day==='pre'&&sessionHasData(s)).length===1?'':'s'} logged. Start the programme from the Gym screen when ready.`))));
   m.append(el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Sessions per week · last 8 weeks'), barChart(weeklyCounts('gym'),{color:COLOR.gym,target:S.settings.targets.gym||null})));
   const keys=allExerciseKeys(); const logged=[...keys.keys()].filter(k=>!PULL_KEYS.includes(k)&&!/^rower-finisher/.test(k)&&S.sessions.some(s=>s.sets[k]&&s.sets[k].some(x=>x.w!=='')));
@@ -791,6 +791,7 @@ function sessionList(){
   return list;
 }
 function allExerciseKeys(){ const seen=new Map(); PROGRAMME.days.forEach(d=>d.exercises.forEach(e=>{ const k=exKey(e.name); if(!seen.has(k)) seen.set(k,e); })); return seen; }
+function bodyKpi(c){ const b=bodySeries(); const w=b.length?b[b.length-1].y:null; const wa=S.checkins.filter(x=>x.waist!==''&&isFinite(parseFloat(x.waist))).sort((a,b)=>a.date<b.date?-1:1).pop(); const k=kpi(`${w!=null?w.toFixed(1)+' kg':'—'} / ${wa?(+wa.waist)+' cm':'—'}`,'bodyweight / waist',c); k.style.gridColumn='1 / -1'; k.id='bodyKpi'; return k; }
 function bwLatest(){ const b=bodySeries(); return b.length?b[b.length-1].y+' kg':null; }
 
 /* ---------- charts ---------- */
