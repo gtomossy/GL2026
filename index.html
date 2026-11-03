@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}</style>
 <title>GT Fit</title>
-<meta name="gtfit-version" content="2.5">
+<meta name="gtfit-version" content="2.6">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2430">
 <meta name="mobile-web-app-capable" content="yes">
@@ -203,7 +203,7 @@ const GUIDES = [{"id": "squat", "title": "Barbell Back Squat", "rx": "3×8–10 
 </script>
 <script>
 /* ---------- constants ---------- */
-const APP_VERSION='2.5'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
+const APP_VERSION='2.6'; const KEY='gtfit.v2', OLDKEY='gymlog2026.v1', BAR=20;
 const ACTS=['walk','stretch','gym','climb','cardio','other'];
 const OTHERS=['hike','swim','custom'];
 const MACHINES=['rower','treadmill','bike','ride'];
@@ -219,7 +219,7 @@ const CLIMB_LOCS=['Castle Hill','St Peters','St Leonards','Macquarie Park'];
 const today=()=>{ const d=new Date(); return iso(d); };
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const blank=()=>({v:2, view:'home', date:today(), act:'gym', otherKind:'hike', cardioMachine:'rower', dayOverride:null, dayOverrideDate:null, histKey:null, trendTab:'all', calOpen:false, calMonth:null,
-  settings:{programmeStart:null, programmeStarted:false, barMode:'total', targets:{gym:2,climb:1,walk:7,stretch:7,cardio:1,other:1}, climbLocations:CLIMB_LOCS.slice()},
+  settings:{programmeStart:null, programmeStarted:false, barMode:'total', targets:{gym:2,climb:1,walk:7,stretch:7,cardio:1,other:1}, goals:{weight:100,waist:94}, climbLocations:CLIMB_LOCS.slice()},
   sessions:[], pullupTests:[], entries:[], checkins:[], migrated:null});
 let S=blank();
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -230,6 +230,7 @@ function upgrade(){ // v2.4: cycle entries move into Cardio as outdoor rides; ch
   if(!OTHERS.includes(S.otherKind)) S.otherKind='hike'; if(!MACHINES.includes(S.cardioMachine)) S.cardioMachine='rower';
   if(S.trendTab==='cycle') S.trendTab='cardio';
   if(S.settings&&S.settings.targets&&S.settings.targets.cardio==null) S.settings.targets.cardio=1;
+  if(S.settings&&!S.settings.goals) S.settings.goals={weight:100,waist:94};
   if(n) S.upgraded24={on:today(),rides:n}; save(); }
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 function migrate(){ // v1 store → v2; the v1 record is left in place under its own key
@@ -708,12 +709,12 @@ function trendCardio(m){
 function bodySeries(){ const by={}; S.sessions.filter(s=>s.bodyweight!==''&&isFinite(parseFloat(s.bodyweight))).forEach(s=>{ by[s.date]=parseFloat(s.bodyweight); }); S.checkins.filter(c=>c.weight!==''&&isFinite(parseFloat(c.weight))).forEach(c=>{ by[c.date]=parseFloat(c.weight); }); return Object.keys(by).sort().map(d=>({x:d,y:by[d]})); }
 function trendBody(m){
   const bw=bodySeries(); const wa=S.checkins.filter(c=>c.waist!==''&&isFinite(parseFloat(c.waist))).map(c=>({x:c.date,y:parseFloat(c.waist)})).sort((a,b)=>a.x<b.x?-1:1);
-  const lastW=bw[bw.length-1], firstW=bw[0], lastWa=wa[wa.length-1], firstWa=wa[0];
+  const lastW=bw[bw.length-1], firstW=bw[0], lastWa=wa[wa.length-1], firstWa=wa[0]; const GW=+S.settings.goals.weight||100, GA=+S.settings.goals.waist||94;
   m.append(el('div',{class:'panel stack',style:'--c:var(--good)'}, el('h2',{},'Body'),
-    el('div',{class:'kpis'}, kpi(lastW?lastW.y+' kg':'—','bodyweight now','var(--good)'), kpi(lastW&&bw.length>1?(Math.round((lastW.y-firstW.y)*10)/10>0?'+':'')+Math.round((lastW.y-firstW.y)*10)/10+' kg':'—','since '+(firstW?fmt(firstW.x):'first'),'var(--good)'), kpi(lastW?Math.max(0,Math.round((lastW.y-100)*10)/10)+' kg':'—','to 100 kg','var(--good)'), kpi(lastWa?lastWa.y+' cm':'—','waist now','var(--good)')),
-    el('div',{class:'small muted'},'From the weekly check-in on Home; bodyweights entered on gym days are included in the weight chart.')));
-  m.append(bw.length>1?el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Bodyweight (kg)'), lineChart(bw,{color:'var(--good)',target:100,targetLabel:'target'})):el('div',{class:'panel small muted'},'Bodyweight chart: appears from the second weigh-in.'));
-  m.append(wa.length>1?el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Waist (cm)'), el('div',{class:'small muted'},'The dashed line is the Heart Foundation\'s mark for men: health is at risk above 94 cm.'), lineChart(wa,{color:'var(--good)',target:94,targetLabel:'Heart Foundation'})):el('div',{class:'panel small muted'},'Waist chart: appears from the second check-in with a waist measurement.'));
+    el('div',{class:'kpis'}, kpi(lastW?lastW.y+' kg':'—','bodyweight now','var(--good)'), kpi(lastW&&bw.length>1?(Math.round((lastW.y-firstW.y)*10)/10>0?'+':'')+Math.round((lastW.y-firstW.y)*10)/10+' kg':'—','since '+(firstW?fmt(firstW.x):'first'),'var(--good)'), kpi(lastW?Math.max(0,Math.round((lastW.y-GW)*10)/10)+' kg':'—','to goal '+GW+' kg','var(--good)'), kpi(lastWa?lastWa.y+' cm':'—','waist now','var(--good)'), kpi(lastWa?Math.max(0,Math.round((lastWa.y-GA)*10)/10)+' cm':'—','to goal '+GA+' cm','var(--good)')),
+    el('div',{class:'small muted'},`Current goals: ${GW} kg and a waist under ${GA} cm (change them under More). From the weekly check-in on Home; bodyweights entered on gym days are included in the weight chart.`)));
+  m.append(bw.length>1?el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Bodyweight (kg)'), lineChart(bw,{color:'var(--good)',target:GW,targetLabel:'goal'})):el('div',{class:'panel small muted'},'Bodyweight chart: appears from the second weigh-in.'));
+  m.append(wa.length>1?el('div',{class:'panel stack'}, el('div',{class:'eyebrow'},'Waist (cm)'), el('div',{class:'small muted'},`The dashed line is your goal, ${GA} cm.${GA===94?' It is also the Heart Foundation\'s mark for men: health is at risk above 94 cm.':''}`), lineChart(wa,{color:'var(--good)',target:GA,targetLabel:'goal'})):el('div',{class:'panel small muted'},'Waist chart: appears from the second check-in with a waist measurement.'));
   if(firstWa&&wa.length>1) m.append(el('div',{class:'small muted'},`Waist change since ${fmt(firstWa.x)}: ${Math.round((lastWa.y-firstWa.y)*10)/10} cm.`));
   const list=el('div',{class:'panel stack'}, el('h2',{},'Check-ins'));
   if(!S.checkins.length) list.append(el('p',{class:'small muted'},'None yet — the weekly check-in is on Home.'));
@@ -852,6 +853,8 @@ function renderMore(m){
   const tg=el('div',{class:'panel stack'}, el('h2',{},'Weekly targets'), el('p',{class:'small muted',style:'margin:0'},'Times per week. 0 means no target — the activity is still counted.'));
   tg.append(el('div',{class:'row'}, ...ACTS.map(a=>el('label',{class:'f',style:'min-width:56px;color:'+COLOR[a]},LABEL[a], el('input',{type:'number',min:'0',step:'1',inputmode:'numeric',value:st.targets[a]??0,onchange:e=>{st.targets[a]=Math.max(0,parseInt(e.target.value)||0);save();}})))));
   m.append(tg);
+  const gl=S.settings.goals; m.append(el('div',{class:'panel stack'}, el('h2',{},'Body goals'), el('p',{class:'small muted',style:'margin:0'},'Shown as the dashed goal lines on Trends → Body. For reference at 183 cm: the healthy BMI range is 62–83 kg; waist under 102 cm, then under 94 cm, then under half your height (91.5 cm).'),
+    el('div',{class:'row'}, el('label',{class:'f'},'Weight goal (kg)', el('input',{type:'number',step:'0.5',inputmode:'decimal',id:'goalW',value:gl.weight,onchange:e=>{ const v=parseFloat(e.target.value); if(isFinite(v)&&v>0){ gl.weight=v; save(); } }})), el('label',{class:'f'},'Waist goal (cm)', el('input',{type:'number',step:'0.5',inputmode:'decimal',id:'goalA',value:gl.waist,onchange:e=>{ const v=parseFloat(e.target.value); if(isFinite(v)&&v>0){ gl.waist=v; save(); } }})))));
   m.append(el('div',{class:'panel stack'}, el('h2',{},'Climbing locations'), el('p',{class:'small muted',style:'margin:0'},'The list offered on the Climb screen, one per line. "Other" is always available.'),
     el('textarea',{onchange:e=>{ st.climbLocations=e.target.value.split('\n').map(x=>x.trim()).filter(Boolean); save(); }},st.climbLocations.join('\n'))));
   m.append(el('div',{class:'panel stack'}, el('h2',{},'Barbell weights'), el('p',{class:'small muted'},`How a barbell load is written in this app and in the export. The programme's loads are totals including the ${BAR} kg bar (its close-grip bench resumes at 20 kg — an empty bar). Your older sheets sometimes wrote plates only ("30+bar"). Pick one and every barbell exercise shows the plate maths for it.`),
