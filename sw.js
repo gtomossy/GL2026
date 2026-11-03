@@ -1,4 +1,4 @@
-const C='gtfit-v2.3';
+const C='gtfit-v2.4';
 self.addEventListener('install',e=>{self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});
 self.addEventListener('fetch',e=>{ if(e.request.method!=='GET') return;
